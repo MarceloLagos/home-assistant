@@ -99,7 +99,8 @@ class DdWrtDeviceScanner(DeviceScanner):
         """
         _LOGGER.info("Checking ARP")
 
-        url = 'http://{}/Status_Wireless.live.asp'.format(self.host)
+        # Using LAN info instead of just Wireless info.
+        url = 'http://{}/Status_Lan.live.asp'.format(self.host)
         data = self.get_ddwrt_data(url)
 
         if not data:
@@ -107,17 +108,30 @@ class DdWrtDeviceScanner(DeviceScanner):
 
         self.last_results = []
 
-        active_clients = data.get('active_wireless', None)
+        # Using arp_table instead of active_wireless
+        active_clients = data.get('arp_table', None)
         if not active_clients:
             return False
 
-        # The DD-WRT UI uses its own data format and then
-        # regex's out values so this is done here too
-        # Remove leading and trailing single quotes.
-        clean_str = active_clients.strip().strip("'")
-        elements = clean_str.split("','")
+        # Using arp_table to include all active clients
+        # not just wireless clients connected to this router
+        # Otherwise list will not show clients connected to a secondary
+        # Access Point router in the network.
+        cleaned_str = active_clients.replace(
+            "\"", "").replace("\'", "").replace(" ", "")
+        elements = cleaned_str.split(',')
+        num_clients = int(len(elements) / 4)
+        mac_elements = {}
+        for idx in range(0, num_clients):
+            # The data is a single array
+            # every 4 elements represents one host, the MAC
+            # is the third element and the name is the first.
+            mac_index = (idx * 4) + 2
+            if mac_index < len(elements):
+                mac = elements[mac_index]
+                mac_elements[mac] = elements[idx * 4]
 
-        self.last_results.extend(item for item in elements
+        self.last_results.extend(item for item in mac_elements
                                  if _MAC_REGEX.match(item))
 
         return True
